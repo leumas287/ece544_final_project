@@ -1,21 +1,21 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jun  7 00:20:06 2017
-
-@author: Dakota
-"""
-
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jun  6 20:02:57 2017
-
-@author: Dakota
 """# -*- coding: utf-8 -*-
+# find.can.py
+# Created on Tue Jun  6 12:19:28 2017
+# @author: Dakota
+# USAGE: Requires:  python 3+
+#                   Opencv 3.2 ["import cv2"]
+#                   usb web camera 
+#                   python numpy lib ["import numpy"]
+#
+# Description:
+# Python script runs in a main loop capturing frames from webcamera for image processing.
+# If red soda can object or blue paper square (hung vertically) is present in image,
+# then positive identification of image will be confirmed by a red bounding box around the target ROI
+#
+# Robot motor control functions are commented out, as this script is meant to test the object detection
+# separately from motor control 
 """
-Created on Tue Jun  6 12:19:28 2017
 
-@author: Dakota
-"""
 import numpy as np
 import cv2
 
@@ -25,6 +25,7 @@ used to grab actual camera frame dimensions
 #fHeight = cap.get(4)
 '''
 def update_shape(contours):
+    # from contour data ,approximate the shape with the arc lengths of the contours 
     approx = cv2.approxPolyDP(contours,0.01*cv2.arcLength(contours,True),True) 
     if len(approx) == 4:
         return "square"
@@ -43,8 +44,8 @@ def update_box_points(contours):
     
 def order_points(pts):
     # initialzie a list of coordinates that will be ordered
-    # such that the first entry in the list is the top-left,
-    # the second entry is the top-right, the third is the
+    # first entry in the list is the top-left,
+    # second entry is the top-right, the third is the
     # bottom-right, and the fourth is the bottom-left
     rect = np.zeros((4, 2), dtype = "float32")
     
@@ -54,9 +55,7 @@ def order_points(pts):
     rect[0] = pts[np.argmin(s)]
     rect[2] = pts[np.argmax(s)]
     
-    # now, compute the difference between the points, the
-    # top-right point will have the smallest difference,
-    # whereas the bottom-left will have the largest difference
+    # compute the difference between the points
     diff = np.diff(pts, axis = 1)
     rect[1] = pts[np.argmin(diff)]
     rect[3] = pts[np.argmax(diff)]
@@ -88,20 +87,25 @@ def get_dimensions(pts,known_width):
     return dimensions
 
        
-def find_frame_pos(centerX):
-    position = ''
-    
-    if (int(centerX) > 0) and (int(centerX) < 213):
-        position = "left"  
-    
-    elif (int(centerX) > 213) and (int(centerX) < 426):
-        position = "middle"
-     
-    else:    
-        position ="right"   
-    
-    return position
+def find_object_x_offset(centerX):
+    # Find the x offset by taking the frame center (width/2) and subtract the current object's x-center.
+    # This means that an object to the left of center will have a positive value and an object to the right
+    # of center will have a negative value.  The offset should be at most abs(frame_in_w/2)
+    return (frame_in_w/2) - centerX
 
+'''
+def center_to_object(xOffset):
+    absX = abs(xOffset)
+    if absX > 20:
+        if xOffset < 0:
+            my_robot.left()
+            print(xOffset)
+        else:
+            my_robot.right()
+            print(xOffset)
+    elif absX <= 20:
+        centered = True
+'''        
 def distance_to_camera(knownWidth, focalLength, percieved_width):
     # compute and return the distance from the maker to the camera
     return (knownWidth * focalLength) / percieved_width
@@ -110,30 +114,49 @@ def update_distance(known_width,focalLength, perWidth):
     inches = distance_to_camera(known_width, focalLength, perWidth)
     return inches
 
-#Camera Calibration
-#Known width/height of coke can
-KNOWN_CAN_WIDTH          = 2.598
-KNOWN_TARGET_WIDTH       = 13.937
-KNOWN_CAN_PIXEL_WIDTH    = 133
-KNOWN_TARGET_PIXEL_WIDTH = 344
-KNOWN_CAN_DISTANCE       = 12 #empirically derived distance from lens to coke can
-KNOWN_TARGET_DISTANCE    = 26
+'''
+def approach_object(distance):
+    my_robot.release()
+    for i in range(0,math.floor(distance)):
+        my_robot.forward(0.05)
+    
+    my_robot.grip()
+'''
+
+'''
+def get_can(position, distance):
+    if not centered:
+        center_to_object(position)
+    else:
+        approach_object(distance)
+'''
+        
+#Camera Calibration Constants
+#Known width of coke can/ drop off target
+KNOWN_CAN_WIDTH          = 2.598    #inches
+KNOWN_TARGET_WIDTH       = 13.937   #inches
+KNOWN_CAN_PIXEL_WIDTH    = 133      #pixels
+KNOWN_TARGET_PIXEL_WIDTH = 344      #pixels
+KNOWN_CAN_DISTANCE       = 12       #inches
+KNOWN_TARGET_DISTANCE    = 26       #inches
 focalLength_can = (KNOWN_CAN_PIXEL_WIDTH * KNOWN_CAN_DISTANCE) / KNOWN_CAN_WIDTH
 focalLength_target = (KNOWN_TARGET_PIXEL_WIDTH * KNOWN_TARGET_DISTANCE) / KNOWN_TARGET_WIDTH
+frame_in_w               = 640      #pixels
 
+#Global variables                     
 cap = cv2.VideoCapture(0)
 shape =' '
 results ={}
 position=' '
 distance = 0
 cnt_length = 0
+centered = False
+
 
 # define range of red color in HSV
 lower_red = np.array([17, 15, 100], dtype=np.uint8)
 upper_red = np.array([50, 56, 200], dtype=np.uint8)
-# define range of green color in HSV
-lower_green = np.array([34, 50, 50], dtype=np.uint8)
-upper_green = np.array([80, 220, 200], dtype=np.uint8)
+
 # define range of blue color in HSV
 lower_blue = np.array([92, 0, 0], dtype=np.uint8)
 upper_blue = np.array([124, 255, 255], dtype=np.uint8)
@@ -146,12 +169,13 @@ while(True):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     # Threshold the HSV image to get only red colors
     mask_red = cv2.inRange(hsv, lower_red, upper_red)
-    mask_green = cv2.inRange(hsv, lower_green, upper_green)
     mask_blue  = cv2.inRange(hsv, lower_blue, upper_blue)
     mask_zero = np.zeros(hsv.shape[:2],np.uint8)
-    #res = cv2.bitwise_and(frame,frame, mask= mask)
+  
+    # Filter Image
     # RGB to Gray scale conversion
     img_gray = cv2.cvtColor(frame,cv2.COLOR_RGB2GRAY)
+    #cv2.imshow("Grayscale", img_gray)
     # Noise removal with iterative bilateral filter(removes noise while preserving edges)
     noise_removal = cv2.bilateralFilter(img_gray,9,75,75)
     # Thresholding the image
@@ -159,65 +183,62 @@ while(True):
     
     # Applying Canny Edge detection
     canny_image = cv2.Canny(thresh_image,250,255)
-    # Display Image
     canny_image = cv2.convertScaleAbs(canny_image)
-
     # dilation to strengthen the edges
     kernel = np.ones((3,3), np.uint8)
     # Creating the kernel for dilation
     dilated_image = cv2.dilate(canny_image,kernel,iterations=1)
-   
     
     #find contour data
     __,contours,__ = cv2.findContours(dilated_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     contours= sorted(contours, key = cv2.contourArea, reverse = True)[:1]
-    pt = (180, 3 * frame.shape[0] // 4)
+    
     for cnt in contours:
         	# if the contour is not sufficiently large, ignore it
             if cv2.contourArea(cnt) < 100:
                 continue
             
             shape = update_shape(cnt)
-            if (shape == "square"):
+            if (shape == "square"):             #Drop off target detected
                 rect = cv2.minAreaRect(cnt)
                 box = cv2.boxPoints(rect)
                 box = np.array(box, dtype="int")
-                cX = np.average(box[:, 0])
-                # compute the center of the bounding box
-                cX = np.average(box[:, 0])
+                cX = np.average(box[:, 0])      # compute the center of the bounding box
+                
+                # object identified, center and approach                
                 results = get_dimensions(box, KNOWN_TARGET_WIDTH)
-                position = find_frame_pos(cX)
+                position = find_object_x_offset(cX)
+                #center_to_object(position)
                 distance = update_distance(KNOWN_TARGET_WIDTH, focalLength_can, results["width_px"]) 
-                print(results)
-                print(position)
-                print("dist from camera:", distance)
-                if cv2.countNonZero(mask_blue):
+                #approach_object(distance)
+                
+                if cv2.countNonZero(mask_blue): # Drop off target is blue, only draw contours if blue detected
                     print("Blue detected")
                     mask_green = mask_zero
                     mask_red = mask_zero
                     cv2.drawContours(frame,[box],0,(0,0,255),2)
-                else:
+                else:                           #Blue not found, do nothing
                     continue
                 
-            elif (shape == "cylinder"):
+            elif (shape == "cylinder"):         #Soda can detected
                 rect = cv2.minAreaRect(cnt)
                 box = cv2.boxPoints(rect)
                 box = np.array(box, dtype="int")
-                cX = np.average(box[:, 0])
-                # compute the center of the bounding box
-                cX = np.average(box[:, 0])
-                results = get_dimensions(box, KNOWN_CAN_WIDTH)
-                position = find_frame_pos(cX)
-                distance = update_distance(KNOWN_CAN_WIDTH, focalLength_can, results["width_px"]) 
-                print(results)
-                print(position)
-                print("dist from camera:", distance)
-                if cv2.countNonZero(mask_red):
+                cX = np.average(box[:, 0])      # compute the center of the bounding box
+                
+                # object identified, center and approach 
+                results = get_dimensions(box, KNOWN_TARGET_WIDTH)
+                position = find_object_x_offset(cX)
+                #center_to_object(position)
+                distance = update_distance(KNOWN_TARGET_WIDTH, focalLength_can, results["width_px"]) 
+                #approach_object(distance)
+                 
+                if cv2.countNonZero(mask_red): # soda can target is red, only draw contours if red detected
                     print("Red detected")
                     mask_green = mask_zero
                     mask_blue = mask_zero
                     cv2.drawContours(frame,[box],0,(0,0,255),2)
-                else:
+                else:                          #Red not found, do nothing 
                     continue
             
           
@@ -229,4 +250,3 @@ while(True):
 # When everything done, release the capture
 cap.release()
 cv2.destroyAllWindows()
-
