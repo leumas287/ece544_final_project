@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jun  9 15:52:59 2017
-
-@author: Dakota Ward
+# Created on Fri Jun  9 15:52:59 2017
+# pull_urls.py
+# @author: Dakota Ward
 # USAGE: Requires:  python 3+
 #                   Opencv 3.2 ["import cv2"]
 #                   internet connection 
